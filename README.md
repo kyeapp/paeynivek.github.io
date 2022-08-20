@@ -1,2 +1,2 @@
-# -paeynivek.github.io
+# paeynivek.github.io
 threejs portfolio
