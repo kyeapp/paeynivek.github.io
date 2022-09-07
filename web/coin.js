@@ -1,97 +1,48 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'orbit';
-// import { STLLoader } from 'stlLoader';
-import { GLTFLoader } from 'gltfLoader';
-import { EffectComposer } from 'effectComposer';
-import { UnrealBloomPass } from 'unrealBloomPass';
-import { RenderPass } from 'renderPass';
-// import { SAOPass } from 'saoPass';
-// import { SobelOperatorShader } from 'sobelOperatorShader';
-// import { LuminosityShader } from 'luminosityShader';
-import { ShaderPass } from 'shaderPass';
-import Stats from 'stats';
+import Stats from 'three.js/examples/jsm/libs/stats.module.js';
+import WebGL from 'three.js/examples/jsm/capabilities/WebGL.js';
+import { OrbitControls } from 'three.js/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three.js/examples/jsm/loaders/GLTFLoader.js';
+import { RenderPass } from 'three.js/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three.js/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { EffectComposer } from 'three.js/examples/jsm/postprocessing/EffectComposer.js';
+import { ShaderPass } from 'three.js/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three.js/examples/jsm/shaders/FXAAShader.js';
+import { RGBELoader } from 'three.js/examples/jsm/loaders/RGBELoader.js';
 
-// TODO:
-// stars opacity
-// 
+// const stats = Stats()
+// document.body.appendChild(stats.dom)
 
-var scene, camera, renderer, bloomComposer, finalComposer;
-var coin, coinEdges;
-const coordMax = 1000;
-const particleCount = 1000;
-const mouse = new THREE.Vector2();
+const coinRadius = 13;
+const assetFolder = '../assets/'
 
+var scene, camera, renderer;
+var bloomComposer, finalComposer;
 var controls;
-var mixer;
-var clipAction;
-
-const stats = Stats()
-document.body.appendChild(stats.dom)
-
-const darkMaterial = new THREE.MeshBasicMaterial({ color: 'black' });
-
 function init() {
 	scene = new THREE.Scene();
 	camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-	renderer = new THREE.WebGLRenderer();
+	renderer = new THREE.WebGLRenderer({ antialias: true });
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setClearColor(0x000000, 1);
+	renderer.outputEncoding = THREE.sRGBEncoding
 	document.body.appendChild(renderer.domElement);
 
 	controls = new OrbitControls(camera, renderer.domElement);
 
-	const coinRadius = 4;
-	camera.position.set(0, -2 * coinRadius, 1);
+	camera.position.set(0, 0, 2.5 * coinRadius);
 	camera.lookAt(0, 0, 0);
 
-	const loader = new GLTFLoader();
-	let l = loader.load(
-		'coin.glb',
-		function (gltf) {
-			coin = gltf.scene;
-			// save original material
-			for (let mesh of coin.children[0].children) {
-				mesh.originalMaterial = mesh.material
-			}
-			scene.add(gltf.scene);
+	const ambientLight = new THREE.AmbientLight(0xFFFFFF, 1);
+	scene.add(ambientLight);
 
-			// setup coin flip animation player
-			mixer = new THREE.AnimationMixer(coin);
-			mixer.addEventListener('finished', function (e) {
-			});
-
-			// initialize clipAction for renderer
-			const initAnimation = new THREE.AnimationClip("place_holder", -1, []);
-			clipAction = mixer.clipAction(initAnimation);
-			clipAction.repetitions = 1
-			clipAction.loop = THREE.LoopOnce
-			coin.rotationAmount = 0
-
-			scene.add(coin)
-
-			// let edgeGeometry = new THREE.EdgesGeometry(geometry, 45);
-			// let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-			// coinEdges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
-			// scene.add(coinEdges);
-		},
-		(xhr) => {
-			// coin loaded
-		},
-		(error) => {
-			console.log(error)
-		}
-	)
-
-	setupLights(scene, coinRadius)
-	// setupStars(scene)
-	setupWeb(scene)
-
-	window.addEventListener('resize', onWindowResize, false)
-	window.addEventListener('click', onClick, false);
+	setupCoin()
+	setupLights()
+	setupBackground()
 
 	const params = {
-		exposure: 1.0,
-		bloomStrength: 1.0,
+		exposure: 1,
+		bloomStrength: 1.5,
 		bloomThreshold: 0,
 		bloomRadius: 0
 	};
@@ -123,20 +74,68 @@ function init() {
 	finalComposer = new EffectComposer(renderer);
 	finalComposer.addPass(renderScene);
 	finalComposer.addPass(finalPass);
-};
+}
 
+var coin, mixer, clipAction;
+const coinOutlineGroup = new THREE.Group();
+function setupCoin() {
+	window.addEventListener('resize', onWindowResize, false)
+	window.addEventListener('click', onClick, false);
+
+	const loader = new GLTFLoader();
+	let l = loader.load(
+		assetFolder + 'coin.glb',
+		function (gltf) {
+			coin = gltf.scene;
+			coin.children[0].children[0].material.side = THREE.FontSide
+			coin.children[0].children[1].material.side = THREE.FontSide
+			scene.add(coin);
+			// save original material
+			for (let mesh of coin.children[0].children) {
+				mesh.originalMaterial = mesh.material
+			}
+
+			// setup coin flip animation player
+			mixer = new THREE.AnimationMixer(coin);
+
+			// initialize clipAction for renderer
+			const initAnimation = new THREE.AnimationClip("place_holder", -1, []);
+			clipAction = mixer.clipAction(initAnimation);
+			clipAction.repetitions = 1
+			clipAction.loop = THREE.LoopOnce
+			coin.rotationAmount = 0
+
+			// initialize coin outline
+			for (let i in coin.children[0].children) {
+				let geometry = coin.children[0].children[i].geometry
+				let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
+				let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+				let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
+				coinOutlineGroup.add(coinOutline)
+			}
+			scene.add(coinOutlineGroup);
+		},
+		(xhr) => {
+			// coin loaded
+		},
+		(error) => {
+			console.log(error)
+		}
+	)
+}
 
 const headSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-32, -16, -8, -4, -2, -1, 0, 0]
+	[-64, -16, -8, -4, -2, -1, 0, 0]
 );
 const tailSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-32 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
+	[-64 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
 );
 
+const mouse = new THREE.Vector2();
 function onClick(event) {
 	event.preventDefault();
 
@@ -147,26 +146,22 @@ function onClick(event) {
 
 	raycaster.setFromCamera(mouse, camera);
 
-	// use raycaster to check if pointer has over an object
-	const intersects = raycaster.intersectObjects(scene.children);
+	const intersects = raycaster.intersectObjects(coin.children[0].children);
 
 	if (intersects.length < 1) {
 		// no objects clicked
 		return
 	}
-	if (clipAction.isRunning()) {
-		// animation already running
-		return
-	}
+	clipAction.stop() // stop previous spin action before we lose its handle
 
 	// Determine outcome of coin
 	let heads = Math.floor(Math.random() * 2);
 	let spinTrack
 	if (heads) {
-		coin.rotation.z = 0
+		coin.rotation.y = 0
 		spinTrack = headSpinTrack
 	} else {
-		coin.rotation.z = Math.PI
+		coin.rotation.y = Math.PI
 		spinTrack = tailSpinTrack
 	}
 
@@ -178,39 +173,42 @@ function onClick(event) {
 	clipAction.play();
 }
 
-function setupLights(scene, coinRadius) {
-	const ambientLight = new THREE.AmbientLight(0xffffff, 1);
-	scene.add(ambientLight);
+function setupLights() {
+	const light = new THREE.DirectionalLight(0xFFFFFF, 1);
+	light.position.set(0, coinRadius, 0);
+	scene.add(light)
+	// const helper = new THREE.DirectionalLightHelper(light, 5);
+	// scene.add(helper);
 
-	// SpotLight( color : Integer, intensity : Float, distance : Float, angle : Radians, penumbra : Float, decay : Float )
-	// Key light
-	const light = new THREE.SpotLight(0xFFFFFF, 1, 8 * coinRadius, Math.PI / 4, 0, 2);
-	light.position.set(-2 * coinRadius, 2 * coinRadius, coinRadius / 2);
-	light.castShadow = true;
-	// light.add(new THREE.SpotLightHelper(light));
-	scene.add(light);
+	const light2 = new THREE.DirectionalLight(0xFFFFFF, 1);
+	light2.position.set(0, coinRadius, coinRadius);
+	scene.add(light2)
+	// const helper2 = new THREE.DirectionalLightHelper(light2, 5);
+	// scene.add(helper2);
 
-	// Fill light
-	const light2 = new THREE.SpotLight(0xFFFFFF, .1, 8 * coinRadius, Math.PI / 4, 0, 2);
-	light2.position.set(2 * coinRadius, 2 * coinRadius, coinRadius / 2);
-	// light2.add(new THREE.SpotLightHelper(light2));
-	scene.add(light2);
+	const light3 = new THREE.DirectionalLight(0xFFFFFF, 1);
+	light3.position.set(0, -coinRadius, coinRadius);
+	scene.add(light3)
+	// const helper3 = new THREE.DirectionalLightHelper(light3, 5);
+	// scene.add(helper3);
 
-	// Back light
-	const light3 = new THREE.SpotLight(0xFFFFFF, .25, 20 * coinRadius, Math.PI / 4, 0, 2);
-	light3.position.set(-4 * coinRadius, -6 * coinRadius, coinRadius / 2);
-	// light3.add(new THREE.SpotLightHelper(light3));
-	scene.add(light3);
+	const light4 = new THREE.DirectionalLight(0xFFFFFF, 1);
+	light4.position.set(-2 * coinRadius, coinRadius, -coinRadius / 2);
+	scene.add(light4)
+	// const helper4 = new THREE.DirectionalLightHelper(light4, 5);
+	// scene.add(helper4);
 
-	const light4 = new THREE.SpotLight(0xFFFFFF, 1, 20, Math.PI / 4, 0, 2);
-	light4.position.set(0, 0, 5);
-	// light4.add(new THREE.SpotLightHelper(light4));
-	scene.add(light4);
+	const light5 = new THREE.DirectionalLight(0xFFFFFF, .1);
+	light5.position.set(coinRadius, coinRadius / 4, -coinRadius);
+	scene.add(light5)
+	// const helper5 = new THREE.DirectionalLightHelper(light5, 5);
+	// scene.add(helper5);
 
-
-	// Create a helper for the shadow camera (optional)
-	// const helper = new THREE.CameraHelper( light.shadow.camera );
-	// scene.add( helper );
+	const light6 = new THREE.DirectionalLight(0xFFFFFF, .2);
+	light6.position.set(coinRadius, coinRadius / 5, coinRadius);
+	scene.add(light6)
+	// const helper6 = new THREE.DirectionalLightHelper(light6, 5);
+	// scene.add(helper6);
 
 	// The X axis is red. The Y axis is green. The Z axis is blue.
 	// scene.add(new THREE.AxesHelper(15));
@@ -221,6 +219,7 @@ const clock = new THREE.Clock();
 var delta = 0;
 const fps = 60;
 const interval = 1 / fps;
+const darkMaterial = new THREE.MeshBasicMaterial({ color: 'black' });
 function animate() {
 	requestAnimationFrame(animate);
 	delta += clock.getDelta();
@@ -231,70 +230,37 @@ function animate() {
 	}
 
 	updateCoin()
-	// updateStars()
 	updateWeb()
 
 	// controls.update();
+	//renderer.render(scene, camera);
+	for (let mesh of coin.children[0].children) {
+		mesh.material = darkMaterial
+	}
+	bloomComposer.render();
+	for (let mesh of coin.children[0].children) {
+		mesh.material = mesh.originalMaterial
+	}
+	finalComposer.render();
 	delta = delta % interval;
-	stats.update()
-	// renderer.render(scene, camera);
+	// stats.update()
 };
 
 function updateCoin() {
 	mixer.update(delta);
 
 	if (clipAction.isRunning()) {
-		coin.rotation.z = coin.rotationAmount;
+		coin.rotation.y = coin.rotationAmount;
 	} else {
-		coin.rotation.z += Math.PI / 1028;
+		coin.rotation.y += Math.PI / 2048;
 	}
 
-	// coinEdges.rotation.z = coin.rotation.z;
-}
-
-var stars;
-function setupStars() {
-	let vertices = [];
-
-	var x, y, z
-	for (var i = 0; i < particleCount; i++) {
-		x = THREE.MathUtils.randFloatSpread(coordMax);
-		y = THREE.MathUtils.randFloatSpread(coordMax);
-		z = THREE.MathUtils.randFloatSpread(coordMax);
-		vertices.push(x, y, z);
-	}
-
-	const geometry = new THREE.BufferGeometry();
-	geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-
-	let starSprite = new THREE.TextureLoader().load('star.png');
-	const starMaterial = new THREE.PointsMaterial({ size: 2, map: starSprite, transparent: false });
-
-	stars = new THREE.Points(geometry, starMaterial);
-	scene.add(stars);
-}
-
-// Background of coin moving through space
-var vertices;
-var resetStarPos;
-function updateStars() {
-	// rotate stars ever so slightly
-	stars.rotation.y += .0004
-
-	vertices = stars.geometry.attributes.position.array;
-	resetStarPos = camera.position.y - 50
-	for (let i = 1; i < vertices.length; i += 3) {
-		vertices[i] -= 1
-		if (vertices[i] < resetStarPos) {
-			vertices[i - 1] = THREE.MathUtils.randFloatSpread(coordMax);
-			vertices[i] += coordMax
-			vertices[i + 1] = THREE.MathUtils.randFloatSpread(coordMax);
-		}
-	}
-	stars.geometry.attributes.position.needsUpdate = true;
+	coinOutlineGroup.rotation.y = coin.rotation.y;
 }
 
 var web
+const coordMax = 2000;
+const particleCount = 400;
 function setupWeb() {
 	let vertices = [];
 	let lineColors = [];
@@ -323,30 +289,26 @@ function setupWeb() {
 }
 
 // Background of coin moving through web
-var resetWebPos;
 function updateWeb() {
-	web.rotation.y += .001
+	web.rotation.z += .0001
 
-	vertices = web.geometry.attributes.position.array;
-	resetWebPos = camera.position.y - 50
-	for (let i = 1; i < vertices.length; i += 3) {
-		vertices[i] -= 1
-		if (vertices[i] < resetWebPos) {
+	let vertices = web.geometry.attributes.position.array;
+	let resetPos = camera.position.z - 50
+	for (let i = 2; i < vertices.length; i += 6) {
+		let j = i + 3
+		vertices[i] += .5
+		vertices[j] += .5
+		if (vertices[i] > resetPos || vertices[j] > resetPos) {
+			vertices[i - 2] = THREE.MathUtils.randFloatSpread(coordMax);
 			vertices[i - 1] = THREE.MathUtils.randFloatSpread(coordMax);
-			vertices[i] += coordMax
-			vertices[i + 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i] = THREE.MathUtils.randFloatSpread(coordMax) - coordMax
+
+			vertices[j - 2] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[j - 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[j] = THREE.MathUtils.randFloatSpread(coordMax) - coordMax
 		}
 	}
 	web.geometry.attributes.position.needsUpdate = true;
-
-	for (let mesh of coin.children[0].children) {
-		mesh.material = darkMaterial
-	}
-	bloomComposer.render();
-	for (let mesh of coin.children[0].children) {
-		mesh.material = mesh.originalMaterial
-	}
-	finalComposer.render();
 }
 
 function onWindowResize() {
@@ -356,12 +318,15 @@ function onWindowResize() {
 	camera.aspect = width / height;
 	camera.updateProjectionMatrix();
 
-	renderer.setSize( width, height );
-
-	bloomComposer.setSize( width, height );
-	finalComposer.setSize( width, height );
+	renderer.setSize(width, height);
+	bloomComposer.setSize(width, height);
+	finalComposer.setSize(width, height);
 
 	finalComposer.render();
+}
+
+function setupBackground() {
+	setupWeb()
 }
 
 init();
