@@ -3,11 +3,11 @@ import Stats from 'three.js/examples/jsm/libs/stats.module.js';
 import WebGL from 'three.js/examples/jsm/capabilities/WebGL.js';
 import { OrbitControls } from 'three.js/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three.js/examples/jsm/loaders/GLTFLoader.js';
-import { RenderPass } from 'three.js/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three.js/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { EffectComposer } from 'three.js/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three.js/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three.js/examples/jsm/postprocessing/ShaderPass.js';
-import { FXAAShader } from 'three.js/examples/jsm/shaders/FXAAShader.js';
+import { CopyShader } from 'three.js/examples/jsm/shaders/CopyShader.js';
+import { UnrealBloomPass } from 'three.js/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RGBELoader } from 'three.js/examples/jsm/loaders/RGBELoader.js';
 
 // const stats = Stats()
@@ -16,14 +16,28 @@ import { RGBELoader } from 'three.js/examples/jsm/loaders/RGBELoader.js';
 const coinRadius = 13;
 const assetFolder = '../assets/'
 
-var scene, camera, renderer;
-var bloomComposer, finalComposer;
-var controls;
-
+let scene, camera, renderer;
+let controls;
+let bloomComposer, finalComposer;
 function init() {
+	// WebGL 2.0 required for multisampled anti-aliasing
+	if (WebGL.isWebGL2Available() === false) {
+		document.body.appendChild(WebGL.getWebGL2ErrorMessage());
+		return;
+	}
+
 	scene = new THREE.Scene();
+
 	camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+	camera.position.set(0, 0, 2.5 * coinRadius);
+	camera.lookAt(0, 0, 0);
+
+	const ambientLight = new THREE.AmbientLight(0xFFFFFF, 1);
+	scene.add(ambientLight);
+
 	renderer = new THREE.WebGLRenderer({ antialias: true });
+	renderer.autoClear = false;
+	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setClearColor(0x000000, 1);
 	renderer.outputEncoding = THREE.sRGBEncoding
@@ -31,70 +45,10 @@ function init() {
 
 	controls = new OrbitControls(camera, renderer.domElement);
 
-	camera.position.set(0, 0, 2.5 * coinRadius);
-	camera.lookAt(0, 0, 0);
+	const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+	const renderTarget = new THREE.WebGLRenderTarget(size.width, size.height, { samples: 4 });
 
-	const ambientLight = new THREE.AmbientLight(0xFFFFFF, 1);
-	scene.add(ambientLight);
-
-	setupCoin()
-	setupLights()
-	setupBackground()
-};
-
-var coin, mixer, clipAction;
-const coinOutlineGroup = new THREE.Group();
-function setupCoin() {
-	window.addEventListener('resize', onWindowResize, false)
-	window.addEventListener('click', onClick, false);
-
-	const loader = new GLTFLoader();
-	let l = loader.load(
-		assetFolder + 'coin.glb',
-		function (gltf) {
-			coin = gltf.scene;
-			coin.children[0].children[0].material.side = THREE.FontSide
-			coin.children[0].children[1].material.side = THREE.FontSide
-			scene.add(coin);
-
-			// save original material
-			for (let mesh of coin.children[0].children) {
-				mesh.originalMaterial = mesh.material
-			}
-
-			// setup coin flip animation player
-			mixer = new THREE.AnimationMixer(coin);
-
-			// initialize clipAction for renderer
-			const initAnimation = new THREE.AnimationClip("place_holder", -1, []);
-			clipAction = mixer.clipAction(initAnimation);
-			clipAction.repetitions = 1
-			clipAction.loop = THREE.LoopOnce
-			coin.rotationAmount = 0
-
-			// initialize coin outline
-			for (let i in coin.children[0].children) {
-				let geometry = coin.children[0].children[i].geometry
-				let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
-				let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-				let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
-				coinOutlineGroup.add(coinOutline)
-			}
-			scene.add(coinOutlineGroup);
-		},
-		(xhr) => {
-			// coin loaded
-		},
-		(error) => {
-			console.log(error)
-		}
-	)
-
-	setupLights()
-	setupRings()
-
-	window.addEventListener('resize', onWindowResize, false)
-	window.addEventListener('click', onClick, false);
+	const renderPass = new RenderPass(scene, camera);
 
 	const params = {
 		exposure: 1.0,
@@ -103,7 +57,6 @@ function setupCoin() {
 		bloomRadius: 0
 	};
 
-	const renderScene = new RenderPass(scene, camera);
 	const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 	bloomPass.threshold = params.bloomThreshold;
 	bloomPass.strength = params.bloomStrength;
@@ -111,7 +64,7 @@ function setupCoin() {
 
 	bloomComposer = new EffectComposer(renderer);
 	bloomComposer.renderToScreen = false;
-	bloomComposer.addPass(renderScene);
+	bloomComposer.addPass(renderPass);
 	bloomComposer.addPass(bloomPass);
 
 	const finalPass = new ShaderPass(
@@ -127,20 +80,75 @@ function setupCoin() {
 	);
 	finalPass.needsSwap = true;
 
-	finalComposer = new EffectComposer(renderer);
-	finalComposer.addPass(renderScene);
+	finalComposer = new EffectComposer(renderer, renderTarget);
+	finalComposer.addPass(renderPass);
 	finalComposer.addPass(finalPass);
+
+	setupCoin()
+	setupLights()
+	setupBackground()
 };
+
+let coin, mixer, clipAction;
+const coinOutlineGroup = new THREE.Group();
+function setupCoin() {
+	window.addEventListener('resize', onWindowResize, false)
+	window.addEventListener('click', onClick, false);
+
+	const loader = new GLTFLoader();
+	let l = loader
+		.setPath(assetFolder)
+		.load(
+			'coin.glb',
+			function (gltf) {
+				coin = gltf.scene;
+				coin.children[0].children[0].material.side = THREE.FontSide
+				coin.children[0].children[1].material.side = THREE.FontSide
+				scene.add(coin);
+
+				// save original material
+				for (let mesh of coin.children[0].children) {
+					mesh.originalMaterial = mesh.material
+				}
+
+				// setup coin flip animation player
+				mixer = new THREE.AnimationMixer(coin);
+
+				// initialize clipAction for renderer
+				const initAnimation = new THREE.AnimationClip("place_holder", -1, []);
+				clipAction = mixer.clipAction(initAnimation);
+				clipAction.repetitions = 1
+				clipAction.loop = THREE.LoopOnce
+				coin.rotationAmount = 0
+
+				// initialize coin outline
+				for (let i in coin.children[0].children) {
+					let geometry = coin.children[0].children[i].geometry
+					let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
+					let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+					let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
+					coinOutlineGroup.add(coinOutline)
+				}
+				scene.add(coinOutlineGroup);
+			},
+			(xhr) => {
+				// coin loaded
+			},
+			(error) => {
+				console.log(error)
+			}
+		)
+}
 
 const headSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-64, -16, -8, -4, -2, -1, 0, 0]
+	[-32, -16, -8, -4, -2, -1, 0, 0]
 );
 const tailSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-64 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
+	[-32 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
 );
 
 const mouse = new THREE.Vector2();
@@ -223,8 +231,12 @@ function setupLights() {
 
 }
 
+function setupBackground() {
+	setupRings()
+}
+
 const clock = new THREE.Clock();
-var delta = 0;
+let delta = 0;
 const fps = 60;
 const interval = 1 / fps;
 const darkMaterial = new THREE.MeshBasicMaterial({ color: 'black' });
@@ -269,7 +281,7 @@ function updateCoin() {
 // - try forcing the color values to be apart form each other to get more
 // colorul rings.
 // - try different ring speeds
-var ring = []
+let ring = []
 function setupRings() {
 	for (let i = 0; i < 10; i++) {
 		const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
@@ -309,10 +321,6 @@ function onWindowResize() {
 	finalComposer.setSize(width, height);
 
 	finalComposer.render();
-}
-
-function setupBackground() {
-	setupRings()
 }
 
 init();

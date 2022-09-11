@@ -3,11 +3,11 @@ import Stats from 'three.js/examples/jsm/libs/stats.module.js';
 import WebGL from 'three.js/examples/jsm/capabilities/WebGL.js';
 import { OrbitControls } from 'three.js/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three.js/examples/jsm/loaders/GLTFLoader.js';
-import { RenderPass } from 'three.js/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three.js/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { EffectComposer } from 'three.js/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three.js/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three.js/examples/jsm/postprocessing/ShaderPass.js';
-import { FXAAShader } from 'three.js/examples/jsm/shaders/FXAAShader.js';
+import { CopyShader } from 'three.js/examples/jsm/shaders/CopyShader.js';
+import { UnrealBloomPass } from 'three.js/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RGBELoader } from 'three.js/examples/jsm/loaders/RGBELoader.js';
 
 // const stats = Stats()
@@ -16,12 +16,28 @@ import { RGBELoader } from 'three.js/examples/jsm/loaders/RGBELoader.js';
 const coinRadius = 13;
 const assetFolder = '../assets/'
 
-var scene, camera, renderer;
-var controls;
+let scene, camera, renderer;
+let controls;
+let finalComposer;
 function init() {
+	// WebGL 2.0 required for multisampled anti-aliasing
+	if (WebGL.isWebGL2Available() === false) {
+		document.body.appendChild(WebGL.getWebGL2ErrorMessage());
+		return;
+	}
+
 	scene = new THREE.Scene();
+
 	camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+	camera.position.set(0, 0, 2.5 * coinRadius);
+	camera.lookAt(0, 0, 0);
+
+	const ambientLight = new THREE.AmbientLight(0xFFFFFF, 1);
+	scene.add(ambientLight);
+
 	renderer = new THREE.WebGLRenderer({ antialias: true });
+	renderer.autoClear = false;
+	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setClearColor(0x000000, 1);
 	renderer.outputEncoding = THREE.sRGBEncoding
@@ -29,11 +45,15 @@ function init() {
 
 	controls = new OrbitControls(camera, renderer.domElement);
 
-	camera.position.set(0, 0, 2.5 * coinRadius);
-	camera.lookAt(0, 0, 0);
+	const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+	const renderTarget = new THREE.WebGLRenderTarget(size.width, size.height, { samples: 4 });
 
-	const ambientLight = new THREE.AmbientLight(0xFFFFFF, 1);
-	scene.add(ambientLight);
+	const renderPass = new RenderPass(scene, camera);
+	const copyPass = new ShaderPass(CopyShader);
+
+	finalComposer = new EffectComposer(renderer, renderTarget);
+	finalComposer.addPass(renderPass);
+	finalComposer.addPass(copyPass);
 
 	setupCoin()
 	setupLights()
@@ -89,12 +109,12 @@ function setupCoin() {
 const headSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-64, -16, -8, -4, -2, -1, 0, 0]
+	[-32, -16, -8, -4, -2, -1, 0, 0]
 );
 const tailSpinTrack = new THREE.NumberKeyframeTrack(
 	'.rotationAmount',
 	[0.0, 0.5, 1.00, 1.50, 2.0, 2.5, 3.0, 5.0],
-	[-64 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
+	[-32 + Math.PI, -16 + Math.PI, -8 + Math.PI, -4 + Math.PI, -2 + Math.PI, -1 + Math.PI, 0 + Math.PI, Math.PI]
 );
 
 const mouse = new THREE.Vector2();
@@ -177,6 +197,9 @@ function setupLights() {
 
 }
 
+function setupBackground() {
+}
+
 const clock = new THREE.Clock();
 var delta = 0;
 const fps = 60;
@@ -192,7 +215,7 @@ function animate() {
 
 	updateCoin()
 
-	renderer.render(scene, camera);
+	finalComposer.render()
 	delta = delta % interval;
 	// stats.update()
 };
@@ -217,9 +240,6 @@ function onWindowResize() {
 	camera.updateProjectionMatrix();
 
 	renderer.setSize(width, height);
-}
-
-function setupBackground() {
 }
 
 init();
