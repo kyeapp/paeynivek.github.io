@@ -13,6 +13,7 @@ do
 	rm -rf $ct
 	cd ../threejs-coin
 	git checkout $ct
+	git rebase master
 
 	cd ../paeynivek.github.io
 	mkdir $ct
