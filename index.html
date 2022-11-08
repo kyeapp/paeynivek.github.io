@@ -1,30 +1,32 @@
 <head>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial;
-    }
-
-    .preview-box {
-      display: inline-block;
-      margin: auto;
-      text-align: center;
-      /* padding-right: 10px;
-      padding-left: 10px; */
-    }
-
     h1 {
-      margin: auto;
-      padding: 30px;
       text-align: center;
     }
 
     p {
-      margin: auto;
-      font-size: 120%;
-      padding-right: 30px;
-      padding-left: 30px;
-      text-align: left;
+      text-align: center;
+    }
+
+    div.gallery {
+      margin: 5px;
+      border: 1px solid #ccc;
+      float: left;
+      width: 180px;
+    }
+
+    div.gallery:hover {
+      border: 1px solid #777;
+    }
+
+    div.gallery img {
+      width: 100%;
+      height: auto;
+    }
+
+    div.desc {
+      padding: 15px;
+      text-align: center;
     }
   </style>
 </head>
@@ -32,82 +34,35 @@
 <body>
 
 
-  <h1>Functional NFT Coin Concept</h1>
+  <h1>Functional NFT Coin</h1>
   <p>
-    Interactive 3d display coin.  Click on a coin to spin it for heads or tails.  Click and drag to view from different angles.  Scroll to zoom.  Click on a link to view in full screen.
+    Ready to mint. Interactive 3d display coin with animated particle system backgrounds. Click on the coin to flip for heads or tails. All models and displays and backgrounds
+    were created by me.
   </p>
 
+  <div class="gallery">
+    <a href="master/index.html">
+      <image src="assets/thumbnail/base.png" alt="base coin">
+        <div class="desc">base</div>
+    </a>
   </div>
-  <div class="preview-box">
-    <figure>
-      <iframe src="master/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="master/index.html">base coin</a>
-      </figcaption>
-    </figure>
+  <div class="gallery">
+    <a href="space/index.html">
+      <image src="assets/thumbnail/space.png" alt="space">
+        <div class="desc">space</div>
+    </a>
   </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="space/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="space/index.html">space</a>
-      </figcaption>
-    </figure>
+  <div class="gallery">
+    <a href="web/index.html">
+      <image src="assets/thumbnail/web.png" alt="web">
+        <div class="desc">web</div>
+    </a>
   </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="web/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="web/index.html">web</a>
-      </figcaption>
-    </figure>
-  </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="rings/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="rings/index.html">halos</a>
-      </figcaption>
-    </figure>
-  </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="hdri-je-gray-02/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="hdri-je-gray-02/index.html">trees</a>
-      </figcaption>
-    </figure>
-  </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="hdri-small-studio-3/index.html" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="hdri-small-studio-3/index.html">small studio</a>
-      </figcaption>
-    </figure>
-  </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="hdri-the-sky-is-on-fire/" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="hdri-the-sky-is-on-fire/">sunset</a>
-      </figcaption>
-    </figure>
-  </div>
-
-  <div class="preview-box">
-    <figure>
-      <iframe src="hdri-drakensberg-solitary-mountain/" width="400px" height="400px"> </iframe>
-      <figcaption>
-        <a href="hdri-drakensberg-solitary-mountain/">mountain</a>
-      </figcaption>
-    </figure>
+  <div class="gallery">
+    <a href="rings/index.html">
+      <image src="assets/thumbnail/rings.png" alt="rings">
+        <div class="desc">rings</div>
+    </a>
   </div>
 
 </body>
