@@ -18,7 +18,8 @@ const assetFolder = '../assets/'
 
 let scene, camera, renderer;
 let controls;
-let bloomComposer, finalComposer;
+let finalComposer;
+let bloomComposer;
 function init() {
 	// WebGL 2.0 required for multisampled anti-aliasing
 	if (WebGL.isWebGL2Available() === false) {
@@ -28,7 +29,7 @@ function init() {
 
 	scene = new THREE.Scene();
 
-	camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+	camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 	camera.position.set(0, 0, 2.5 * coinRadius);
 	camera.lookAt(0, 0, 0);
 
@@ -51,8 +52,8 @@ function init() {
 	const renderPass = new RenderPass(scene, camera);
 
 	const params = {
-		exposure: 1.0,
-		bloomStrength: 0.7,
+		exposure: 1,
+		bloomStrength: 1.5,
 		bloomThreshold: 0,
 		bloomRadius: 0
 	};
@@ -89,7 +90,7 @@ function init() {
 	setupBackground()
 };
 
-let coin, mixer, clipAction;
+var coin, mixer, clipAction;
 const coinOutlineGroup = new THREE.Group();
 function setupCoin() {
 	window.addEventListener('resize', onWindowResize, false)
@@ -102,12 +103,9 @@ function setupCoin() {
 			'coin.glb',
 			function (gltf) {
 				coin = gltf.scene;
-				coin.children[0].children[0].material.side = THREE.FontSide
-				coin.children[0].children[1].material.side = THREE.FontSide
+				coin.children[0].material.side = THREE.FrontSide
 				scene.add(coin);
-
-				// save original material
-				for (let mesh of coin.children[0].children) {
+				for (let mesh of coin.children) {
 					mesh.originalMaterial = mesh.material
 				}
 
@@ -122,13 +120,11 @@ function setupCoin() {
 				coin.rotationAmount = 0
 
 				// initialize coin outline
-				for (let i in coin.children[0].children) {
-					let geometry = coin.children[0].children[i].geometry
-					let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
-					let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-					let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
-					coinOutlineGroup.add(coinOutline)
-				}
+				let geometry = coin.children[0].geometry
+				let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
+				let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+				let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
+				coinOutlineGroup.add(coinOutline)
 				scene.add(coinOutlineGroup);
 			},
 			(xhr) => {
@@ -162,12 +158,14 @@ function onClick(event) {
 
 	raycaster.setFromCamera(mouse, camera);
 
-	const intersects = raycaster.intersectObjects(coin.children[0].children);
+	const intersects = raycaster.intersectObjects(scene.children);
 
 	if (intersects.length < 1) {
 		// no objects clicked
 		return
 	}
+
+	controls.reset();
 	clipAction.stop() // stop previous spin action before we lose its handle
 
 	// Determine outcome of coin
@@ -232,11 +230,13 @@ function setupLights() {
 }
 
 function setupBackground() {
+	// setupSpace()
+	// setupWeb()
 	setupRings()
 }
 
 const clock = new THREE.Clock();
-let delta = 0;
+var delta = 0;
 const fps = 60;
 const interval = 1 / fps;
 const darkMaterial = new THREE.MeshBasicMaterial({ color: 'black' });
@@ -250,17 +250,12 @@ function animate() {
 	}
 
 	updateCoin()
+
+	// updateStars()
+	// updateWeb()
 	updateRings()
 
-	for (let mesh of coin.children[0].children) {
-		mesh.material = darkMaterial
-	}
-	bloomComposer.render();
-	for (let mesh of coin.children[0].children) {
-		mesh.material = mesh.originalMaterial
-	}
-	finalComposer.render();
-
+	finalComposer.render()
 	delta = delta % interval;
 	// stats.update()
 };
@@ -275,6 +270,129 @@ function updateCoin() {
 	}
 
 	coinOutlineGroup.rotation.y = coin.rotation.y;
+}
+
+function onWindowResize() {
+	const width = window.innerWidth;
+	const height = window.innerHeight;
+
+	camera.aspect = width / height;
+	camera.updateProjectionMatrix();
+
+	renderer.setSize(width, height);
+	bloomComposer.setSize(width, height);
+	finalComposer.setSize(width, height);
+
+	finalComposer.render();
+}
+
+let coordMax;
+let particleCount;
+
+let stars
+coordMax = 1000
+particleCount = 1000
+function setupSpace() {
+	let vertices = [];
+
+	var x, y, z
+	for (var i = 0; i < particleCount; i++) {
+		x = THREE.MathUtils.randFloatSpread(coordMax);
+		y = THREE.MathUtils.randFloatSpread(coordMax);
+		z = THREE.MathUtils.randFloatSpread(coordMax);
+		vertices.push(x, y, z);
+	}
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+
+	let starSprite = new THREE.TextureLoader().load(assetFolder + 'star.png');
+	const starMaterial = new THREE.PointsMaterial({ size: 2, map: starSprite, transparent: true });
+
+	stars = new THREE.Points(geometry, starMaterial);
+	scene.add(stars);
+}
+
+// Background of coin moving through space
+var vertices;
+var resetStarPos;
+function updateStars() {
+	// rotate stars ever so slightly
+	stars.rotation.z += .0004
+
+	vertices = stars.geometry.attributes.position.array;
+	resetStarPos = camera.position.z + 50
+	for (let i = 1; i < vertices.length; i += 3) {
+		vertices[i + 1] += 1
+		if (vertices[i + 1] > resetStarPos) {
+			vertices[i - 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i + 1] -= coordMax
+		}
+	}
+	stars.geometry.attributes.position.needsUpdate = true;
+}
+
+var web
+coordMax = 1000;
+particleCount = 400;
+function setupWeb() {
+	let vertices = [];
+	let lineColors = [];
+
+	var x, y, z
+	for (var i = 0; i < particleCount; i++) {
+		x = THREE.MathUtils.randFloatSpread(coordMax);
+		y = THREE.MathUtils.randFloatSpread(coordMax);
+		z = THREE.MathUtils.randFloatSpread(coordMax);
+		vertices.push(x, y, z);
+
+		// color of vertex
+		lineColors.push(Math.floor(Math.random() * 266))
+		lineColors.push(Math.floor(Math.random() * 266))
+		lineColors.push(Math.floor(Math.random() * 266))
+	}
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+	geometry.setAttribute('color', new THREE.Uint8BufferAttribute(lineColors, 3, true));
+
+	const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true });
+
+	web = new THREE.LineSegments(geometry, lineMaterial);
+	scene.add(web);
+}
+
+// Background of coin moving through web
+function updateWeb() {
+	web.rotation.z += .0001
+
+	let vertices = web.geometry.attributes.position.array;
+	let resetPos = camera.position.z + 50
+	for (let i = 2; i < vertices.length; i += 6) {
+		let j = i + 3
+		vertices[i] += .4
+		vertices[j] += .4
+		if (vertices[i] > resetPos || vertices[j] > resetPos) {
+			vertices[i - 2] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i - 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i] = THREE.MathUtils.randFloatSpread(coordMax) - coordMax
+
+			vertices[j - 2] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[j - 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[j] = THREE.MathUtils.randFloatSpread(coordMax) - coordMax
+		}
+	}
+	web.geometry.attributes.position.needsUpdate = true;
+
+	// render bloom
+	for (let mesh of coin.children) {
+		mesh.material = darkMaterial
+	}
+	bloomComposer.render();
+	for (let mesh of coin.children) {
+		mesh.material = mesh.originalMaterial
+	}
 }
 
 // TODO:
@@ -307,21 +425,21 @@ function updateRings() {
 		ring[i].rotation.y += delta / 70;
 		ring[i].rotation.z += delta / 80;
 	}
+
+	// render bloom
+	coin.children[0].material = darkMaterial
+	bloomComposer.render();
+	coin.children[0].material = coin.children[0].originalMaterial
 }
 
-function onWindowResize() {
-	const width = window.innerWidth;
-	const height = window.innerHeight;
 
-	camera.aspect = width / height;
-	camera.updateProjectionMatrix();
 
-	renderer.setSize(width, height);
-	bloomComposer.setSize(width, height);
-	finalComposer.setSize(width, height);
 
-	finalComposer.render();
-}
+
+
 
 init();
+
+// TODO: don't call animate until the gltf is done loading to prevent harmless
+// startup errors.
 animate();

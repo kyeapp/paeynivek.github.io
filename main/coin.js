@@ -230,7 +230,7 @@ function setupLights() {
 }
 
 function setupBackground() {
-	setupSpace()
+	// setupSpace()
 	// setupWeb()
 	// setupRings()
 }
@@ -251,7 +251,7 @@ function animate() {
 
 	updateCoin()
 
-	updateStars()
+	// updateStars()
 	// updateWeb()
 	// updateRings()
 
@@ -306,7 +306,7 @@ function setupSpace() {
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
 
-	let starSprite = new THREE.TextureLoader().load(assetFolder + 'star.png', );
+	let starSprite = new THREE.TextureLoader().load(assetFolder + 'star.png');
 	const starMaterial = new THREE.PointsMaterial({ size: 2, map: starSprite, transparent: true });
 
 	stars = new THREE.Points(geometry, starMaterial);

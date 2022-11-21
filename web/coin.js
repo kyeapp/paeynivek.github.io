@@ -18,7 +18,8 @@ const assetFolder = '../assets/'
 
 let scene, camera, renderer;
 let controls;
-let bloomComposer, finalComposer;
+let finalComposer;
+let bloomComposer;
 function init() {
 	// WebGL 2.0 required for multisampled anti-aliasing
 	if (WebGL.isWebGL2Available() === false) {
@@ -87,7 +88,7 @@ function init() {
 	setupCoin()
 	setupLights()
 	setupBackground()
-}
+};
 
 var coin, mixer, clipAction;
 const coinOutlineGroup = new THREE.Group();
@@ -102,11 +103,9 @@ function setupCoin() {
 			'coin.glb',
 			function (gltf) {
 				coin = gltf.scene;
-				coin.children[0].children[0].material.side = THREE.FontSide
-				coin.children[0].children[1].material.side = THREE.FontSide
+				coin.children[0].material.side = THREE.FrontSide
 				scene.add(coin);
-				// save original material
-				for (let mesh of coin.children[0].children) {
+				for (let mesh of coin.children) {
 					mesh.originalMaterial = mesh.material
 				}
 
@@ -121,13 +120,11 @@ function setupCoin() {
 				coin.rotationAmount = 0
 
 				// initialize coin outline
-				for (let i in coin.children[0].children) {
-					let geometry = coin.children[0].children[i].geometry
-					let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
-					let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-					let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
-					coinOutlineGroup.add(coinOutline)
-				}
+				let geometry = coin.children[0].geometry
+				let coinEdgeGeometry = new THREE.EdgesGeometry(geometry, 30);
+				let edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+				let coinOutline = new THREE.LineSegments(coinEdgeGeometry, edgeMaterial);
+				coinOutlineGroup.add(coinOutline)
 				scene.add(coinOutlineGroup);
 			},
 			(xhr) => {
@@ -161,12 +158,14 @@ function onClick(event) {
 
 	raycaster.setFromCamera(mouse, camera);
 
-	const intersects = raycaster.intersectObjects(coin.children[0].children);
+	const intersects = raycaster.intersectObjects(scene.children);
 
 	if (intersects.length < 1) {
 		// no objects clicked
 		return
 	}
+
+	controls.reset();
 	clipAction.stop() // stop previous spin action before we lose its handle
 
 	// Determine outcome of coin
@@ -231,7 +230,9 @@ function setupLights() {
 }
 
 function setupBackground() {
+	// setupSpace()
 	setupWeb()
+	// setupRings()
 }
 
 const clock = new THREE.Clock();
@@ -249,16 +250,12 @@ function animate() {
 	}
 
 	updateCoin()
-	updateWeb()
 
-	for (let mesh of coin.children[0].children) {
-		mesh.material = darkMaterial
-	}
-	bloomComposer.render();
-	for (let mesh of coin.children[0].children) {
-		mesh.material = mesh.originalMaterial
-	}
-	finalComposer.render();
+	// updateStars()
+	updateWeb()
+	// updateRings()
+
+	finalComposer.render()
 	delta = delta % interval;
 	// stats.update()
 };
@@ -275,9 +272,70 @@ function updateCoin() {
 	coinOutlineGroup.rotation.y = coin.rotation.y;
 }
 
+function onWindowResize() {
+	const width = window.innerWidth;
+	const height = window.innerHeight;
+
+	camera.aspect = width / height;
+	camera.updateProjectionMatrix();
+
+	renderer.setSize(width, height);
+	bloomComposer.setSize(width, height);
+	finalComposer.setSize(width, height);
+
+	finalComposer.render();
+}
+
+let coordMax;
+let particleCount;
+
+let stars
+coordMax = 1000
+particleCount = 1000
+function setupSpace() {
+	let vertices = [];
+
+	var x, y, z
+	for (var i = 0; i < particleCount; i++) {
+		x = THREE.MathUtils.randFloatSpread(coordMax);
+		y = THREE.MathUtils.randFloatSpread(coordMax);
+		z = THREE.MathUtils.randFloatSpread(coordMax);
+		vertices.push(x, y, z);
+	}
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+
+	let starSprite = new THREE.TextureLoader().load(assetFolder + 'star.png');
+	const starMaterial = new THREE.PointsMaterial({ size: 2, map: starSprite, transparent: true });
+
+	stars = new THREE.Points(geometry, starMaterial);
+	scene.add(stars);
+}
+
+// Background of coin moving through space
+var vertices;
+var resetStarPos;
+function updateStars() {
+	// rotate stars ever so slightly
+	stars.rotation.z += .0004
+
+	vertices = stars.geometry.attributes.position.array;
+	resetStarPos = camera.position.z + 50
+	for (let i = 1; i < vertices.length; i += 3) {
+		vertices[i + 1] += 1
+		if (vertices[i + 1] > resetStarPos) {
+			vertices[i - 1] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i] = THREE.MathUtils.randFloatSpread(coordMax);
+			vertices[i + 1] -= coordMax
+		}
+	}
+	stars.geometry.attributes.position.needsUpdate = true;
+}
+
 var web
-const coordMax = 1000;
-const particleCount = 400;
+coordMax = 1000;
+particleCount = 400;
 function setupWeb() {
 	let vertices = [];
 	let lineColors = [];
@@ -326,21 +384,62 @@ function updateWeb() {
 		}
 	}
 	web.geometry.attributes.position.needsUpdate = true;
+
+	// render bloom
+	for (let mesh of coin.children) {
+		mesh.material = darkMaterial
+	}
+	bloomComposer.render();
+	for (let mesh of coin.children) {
+		mesh.material = mesh.originalMaterial
+	}
 }
 
-function onWindowResize() {
-	const width = window.innerWidth;
-	const height = window.innerHeight;
+// TODO:
+// - try forcing the color values to be apart form each other to get more
+// colorul rings.
+// - try different ring speeds
+let ring = []
+function setupRings() {
+	for (let i = 0; i < 10; i++) {
+		const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
 
-	camera.aspect = width / height;
-	camera.updateProjectionMatrix();
+		const radius = 3 * coinRadius + i / 2
+		const tube = coinRadius / 16
+		const radialSegments = 8
+		const tubularSegments = 32
 
-	renderer.setSize(width, height);
-	bloomComposer.setSize(width, height);
-	finalComposer.setSize(width, height);
-
-	finalComposer.render();
+		const geometry = new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
+		const torus = new THREE.Mesh(geometry, material);
+		torus.rotation.x = 2 * Math.PI * Math.random();
+		torus.rotation.y = 2 * Math.PI * Math.random();
+		torus.rotation.z = 2 * Math.PI * Math.random();
+		ring.push(torus)
+		scene.add(torus);
+	}
 }
+
+function updateRings() {
+	for (let i = 0; i < ring.length; i++) {
+		ring[i].rotation.x += delta / 60;
+		ring[i].rotation.y += delta / 70;
+		ring[i].rotation.z += delta / 80;
+	}
+
+	// render bloom
+	coin.children[0].material = darkMaterial
+	bloomComposer.render();
+	coin.children[0].material = coin.children[0].originalMaterial
+}
+
+
+
+
+
+
 
 init();
+
+// TODO: don't call animate until the gltf is done loading to prevent harmless
+// startup errors.
 animate();
