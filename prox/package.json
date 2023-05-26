@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@types/google.maps": "^3.53.1",
+    "googleapis": "^118.0.0"
+  }
+}
